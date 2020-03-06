@@ -147,7 +147,8 @@ def restore_window(ui, is_popup=False):
     """ Restores the user preference items for a specified UI.
     """
     prefs = ui.restore_prefs()
-    if prefs is not None:
+    # if prefs is not None: # pab old call
+    if prefs is not None and len(prefs) == 4:  # pab new call
         x, y, dx, dy = prefs
 
         # Check to see if the window's position is within a display.

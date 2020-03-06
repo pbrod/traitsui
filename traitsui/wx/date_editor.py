@@ -54,9 +54,10 @@ class SimpleEditor(Editor):
         self.control = date_widget(
             parent,
             size=(120, -1),
-            style=wx.DP_DROPDOWN | wx.DP_SHOWCENTURY | wx.DP_ALLOWNONE,
+            style=wx.adv.DP_DROPDOWN | wx.adv.DP_SHOWCENTURY | wx.adv.DP_ALLOWNONE,  # pab new
+            # style=wx.DP_DROPDOWN | wx.DP_SHOWCENTURY | wx.DP_ALLOWNONE,  # pab old call
         )
-        self.control.Bind(wx.EVT_DATE_CHANGED, self.day_selected)
+        self.control.Bind(wx.adv.EVT_DATE_CHANGED, self.day_selected)
         return
 
     def day_selected(self, event):
@@ -316,7 +317,8 @@ class MultiCalendarCtrl(wx.Panel):
             cal = self._make_calendar_widget(i)
             self.cal_ctrls.insert(0, cal)
             if i != 0:
-                self.sizer.AddSpacer(wx.Size(padding, padding))
+                self.sizer.AddSpacer(padding)  # pab new
+                # self.sizer.AddSpacer(wx.Size(padding, padding))  # pab old
 
         # Initial painting
         self.selected_list_changed()
@@ -438,8 +440,10 @@ class MultiCalendarCtrl(wx.Panel):
         cal.highlight_changed()
 
         # Set up control to sync the other calendar widgets and coloring:
-        self.Bind(wx.adv.EVT_CALENDAR_MONTH, cal, id=self.month_changed)
-        self.Bind(wx.adv.EVT_CALENDAR_YEAR, cal, id=self.month_changed)
+        #self.Bind(wx.adv.EVT_CALENDAR_MONTH, cal, id=self.month_changed)  # TODO: pab: crashes
+        #self.Bind(wx.adv.EVT_CALENDAR_YEAR, cal, id=self.month_changed)  # TODO: pab: crash
+        self.Bind(wx.adv.EVT_CALENDAR_MONTH, self.month_changed, source=cal)  # pab: new
+        self.Bind(wx.adv.EVT_CALENDAR_YEAR, self.month_changed, source=cal)  # pab: new
 
         cal.Bind(wx.EVT_LEFT_DOWN, self._left_down)
 

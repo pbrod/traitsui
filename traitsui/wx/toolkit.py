@@ -554,7 +554,7 @@ class EventHandlerWrapper(wx.EvtHandler):
     pass
 
 
-def _popEventHandlers(ctrl, handler_type=wx.EvtHandler):
+def _popEventHandlers(ctrl, handler_type=EventHandlerWrapper):
     """ Pop any event handlers that have been pushed on to a window and its
         children.
     """
@@ -565,7 +565,7 @@ def _popEventHandlers(ctrl, handler_type=wx.EvtHandler):
     handler = ctrl.GetEventHandler()
     while ctrl is not handler:
         next_handler = handler.GetNextHandler()
-        if (isinstance(handler, EventHandlerWrapper)
+        if (isinstance(handler, handler_type)
                 or not isinstance(ctrl, URLResolvingHtmlWindow)):
             ctrl.PopEventHandler(True)
         handler = next_handler
