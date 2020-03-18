@@ -420,9 +420,11 @@ class TableModel(GridModel):
         """ Returns the value to use when the specified cell is dragged or
             copied and pasted.
         """
-        return self.__get_column(col).get_drag_value(
-            self.get_filtered_item(row)
-        )
+        cell = self.__get_column(col)
+        try:
+            return cell.get_drag_value(self.get_filtered_item(row))
+        except AttributeError:
+            return None
 
     def get_cell_selection_value(self, row, col):
         """ Returns a TraitGridSelection object specifying the data stored
