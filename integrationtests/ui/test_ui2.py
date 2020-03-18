@@ -19,10 +19,10 @@ from __future__ import absolute_import, print_function
 
 import wx
 
-from kiva.traits.kiva_font_trait \
+from kiva.trait_defs.kiva_font_trait \
     import KivaFont
 
-from enable.traits.api \
+from enable.trait_defs.api \
     import RGBAColor
 
 from traits.api \
@@ -185,7 +185,7 @@ class TraitSheetApp(wx.App):
     #-------------------------------------------------------------------------
 
     def OnInit(self):
-        #ui = self.object.edit_traits( 'view', kind = 'live' )
+        # ui = self.object.edit_traits( 'view', kind = 'live' )
         ui = self.object.edit_traits('wizard', kind='wizard')
         self.SetTopWindow(ui.control)
         return True
@@ -194,4 +194,7 @@ class TraitSheetApp(wx.App):
 #  Main program:
 #-------------------------------------------------------------------------
 
-TraitSheetApp(Person())
+if __name__ == '__main__':
+    TraitSheetApp(Person())
+    #p = Person()
+    #p.edit_traits()

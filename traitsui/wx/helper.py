@@ -99,7 +99,8 @@ def bitmap_cache(name, standard_size, path=None):
     if bitmap is not None:
         return bitmap
 
-    std_bitmap = bitmap = wx.BitmapFromImage(wx.Image(filename))
+    # std_bitmap = bitmap = wx.BitmapFromImage(wx.Image(filename))  # old deprecated call
+    std_bitmap = bitmap = wx.Bitmap(wx.Image(filename))  # pab new call
     _bitmap_cache[filename] = bitmap
 
     dx = bitmap.GetWidth()
