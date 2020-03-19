@@ -159,7 +159,7 @@ def ui_wizard(ui, parent):
         ui.result = False
 
     # Clean up loose ends, like restoring the original context:
-    wizard.Unbind(wz.EVT_WIZARD_PAGE_CHANGING, page_changing)
+    wizard.Unbind(wz.EVT_WIZARD_PAGE_CHANGING, handler=page_changing)
     save_window(ui)
     ui.finish()
     ui.context = ui._context
@@ -190,12 +190,12 @@ def page_changing(event):
             wx.MessageBox(msg)
 
 
-class UIWizardPage(wz.PyWizardPage):
+class UIWizardPage(wz.WizardPage):
     """ A page within a wizard interface.
     """
 
     def __init__(self, wizard, pages):
-        wz.PyWizardPage.__init__(self, wizard)
+        super(UIWizardPage, self).__init__(wizard)
         self.next = self.previous = self.editor = None
         self.pages = pages
 
