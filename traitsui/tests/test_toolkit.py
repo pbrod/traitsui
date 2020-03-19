@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 from contextlib import contextmanager
-import warnings
+
 import unittest
 
 from traits.trait_base import ETSConfig
