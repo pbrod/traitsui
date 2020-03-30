@@ -21,4 +21,5 @@
 from __future__ import absolute_import
 from traitsui.extras.demo import demo
 
-demo()
+if __name__ == "__main__":
+    demo()

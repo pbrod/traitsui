@@ -21,6 +21,7 @@ def clear_toolkit():
         traitsui.toolkit._toolkit = old_traitsui_toolkit
 
 
+# @unittest.skip("Hangs")
 class TestToolkit(unittest.TestCase):
     def test_default_toolkit(self):
         with clear_toolkit():

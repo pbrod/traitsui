@@ -114,6 +114,7 @@ class Person(HasTraits):
     human = Bool(True)
     employer = Trait(Employer(company='Enthought, Inc.', boss='eric'))
     eye_color = RGBAColor
+
     set = List(editor=CheckListEditor(
         values=['one', 'two', 'three', 'four'],
         cols=4))
@@ -121,7 +122,7 @@ class Person(HasTraits):
     street = Str
     city = Str
     state = Str
-    zip = Int(78663)
+    zip = Int(78664)
     password = Str
     books = List(Str, ['East of Eden', 'The Grapes of Wrath',
                        'Of Mice and Men'])
@@ -159,6 +160,7 @@ class Person(HasTraits):
 
     wizard = View(('|p1:', 'name', 'age', 'sex'),
                   ('|p2:', 'street', 'city', 'state', 'zip'),
+                  #('|p3:', 'coolness', 'origin', 'human'),
                   ('|p3:', 'eye_color', 'origin', 'human'),
                   handler=WizardHandler())
 
@@ -185,8 +187,8 @@ class TraitSheetApp(wx.App):
     #-------------------------------------------------------------------------
 
     def OnInit(self):
-        # ui = self.object.edit_traits( 'view', kind = 'live' )
         ui = self.object.edit_traits('wizard', kind='wizard')
+        ui = self.object.edit_traits('view', kind='live')
         self.SetTopWindow(ui.control)
         return True
 
@@ -196,5 +198,7 @@ class TraitSheetApp(wx.App):
 
 if __name__ == '__main__':
     TraitSheetApp(Person())
-    #p = Person()
-    #p.edit_traits()
+    # p = Person()
+    # ui = p.edit_traits('wizard', kind = 'wizard')
+    # ui = p.edit_traits( 'view', kind = 'live' )
+    # print(ui)

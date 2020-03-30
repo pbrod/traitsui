@@ -160,19 +160,26 @@ class MakeMenu:
                         handler = self.indirect
                     else:
                         try:
+                            _locl = dict(self=self)
                             exec(
                                 "def handler(event,self=self.owner):\n %s\n"
-                                % handler
+                                % handler,
+                                globals(),
+                                _locl,
                             )
+                            handler = _locl["handler"]
                         except:
                             handler = null_handler
                 else:
                     try:
+                        _locl = dict(self=self)
                         exec(
                             "def handler(event,self=self.owner):\n%s\n"
                             % (self.get_body(indented),),
                             globals(),
+                            _locl,
                         )
+                        handler = _locl["handler"]
                     except:
                         handler = null_handler
                 self.window.Bind(wx.EVT_MENU, handler, id=cur_id)

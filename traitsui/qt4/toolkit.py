@@ -182,7 +182,8 @@ class GUIToolkit(Toolkit):
         """ Creates a PyQt wizard dialog user interface using information
             from the specified UI object.
         """
-        import ui_wizard
+        # TODO: implement qt4.ui_wizard it is missing!
+        from . import ui_wizard
 
         ui_wizard.ui_wizard(ui, parent)
 

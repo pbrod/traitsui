@@ -195,6 +195,7 @@ class HistoryControl(HasPrivateTraits):
                 control.SetValue(restore)
 
                 if select:
-                    control.SetMark(0, len(restore))
+                    # control.SetMark(0, len(restore))  # old
+                    control.SetTextSelection(0, len(restore))
 
             control.Thaw()
