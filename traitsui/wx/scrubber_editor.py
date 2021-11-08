@@ -570,7 +570,7 @@ class _ScrubberEditor(Editor):
         """ Handles the user pressing the 'Enter' key in the text control.
         """
         if isinstance(event, wx.FocusEvent):
-            event.Skip()
+            event.Skip(False)
         if self._update_value(event):
             self._destroy_text()
 

@@ -19,11 +19,12 @@
 """
 
 
-import sys
-import wx
-
+# import sys
+import ast
 from math import log10
 
+import wx
+from wx.lib.agw.floatspin import FixedPoint
 from traits.api import TraitError, Str, Float, Any, Bool
 
 # FIXME: ToolkitEditorFactory is a proxy class defined here just for backward
@@ -39,11 +40,11 @@ from .constants import OKColor, ErrorColor
 
 from .helper import TraitsUIPanel, Slider
 
-
+# pylint: disable=no-member
 if not hasattr(wx, "wx.wxEVT_SCROLL_ENDSCROLL"):
     wxEVT_SCROLL_ENDSCROLL = wx.wxEVT_SCROLL_CHANGED
 else:
-    wxEVT_SCROLL_ENDSCROLL = wx.wxEVT_SCROLL_ENDSCROLL
+    wxEVT_SCROLL_ENDSCROLL = wx.wxEVT_SCROLL_ENDSCROLL  # @UndefinedVariable
 
 
 # -------------------------------------------------------------------------
@@ -60,31 +61,14 @@ class BaseRangeEditor(Editor):
     #  Trait definitions:
     # -------------------------------------------------------------------------
 
-    #: Function to evaluate floats/ints
-    evaluate = Any()
-
-    def _set_value(self, value):
-        if self.evaluate is not None:
-            value = self.evaluate(value)
-        Editor._set_value(self, value)
-
-
-class SimpleSliderEditor(BaseRangeEditor):
-    """ Simple style of range editor that displays a slider and a text field.
-
-    The user can set a value either by moving the slider or by typing a value
-    in the text field.
-    """
-
-    # -------------------------------------------------------------------------
-    #  Trait definitions:
-    # -------------------------------------------------------------------------
-
-    #: Low value for the slider range
+    #: Low value for the range
     low = Any()
 
-    #: High value for the slider range
+    #: High value for the range
     high = Any()
+
+    #: Function to evaluate floats/ints
+    evaluate = Any()
 
     #: Formatting string used to format value and labels
     format = Str()
@@ -96,99 +80,252 @@ class SimpleSliderEditor(BaseRangeEditor):
         """ Finishes initializing the editor by creating the underlying toolkit
             widget.
         """
+        self._init_with_factory_defaults()
+        self.control = self._make_control(parent)
+        self._do_layout(self.control)
+
+    def _init_with_factory_defaults(self):
         factory = self.factory
+        # Initialize using the factory range defaults:
         if not factory.low_name:
             self.low = factory.low
-
         if not factory.high_name:
             self.high = factory.high
-
-        self.format = factory.format
-
         self.evaluate = factory.evaluate
+
+        # Hook up the traits to listen to the object.
         self.sync_value(factory.evaluate_name, "evaluate", "from")
-
-        size = wx.DefaultSize
-        if factory.label_width > 0:
-            size = wx.Size(factory.label_width, 20)
-
-        self.sync_value(factory.low_name, "low", "from")
         self.sync_value(factory.high_name, "high", "from")
-        self.control = panel = TraitsUIPanel(parent, -1)
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
-        fvalue = self.value
+        self.sync_value(factory.low_name, "low", "from")
 
-        if not (self.low <= fvalue <= self.high):
-            fvalue_text = ""
-            fvalue = self.low
+    def _make_control(self, parent):
+        raise NotImplementedError
+
+    def _make_text_entry(self, control, fvalue_text):
+        size = wx.Size(56, 20)
+        if self.factory.enter_set:
+            text = wx.TextCtrl(control,
+                               -1,
+                               fvalue_text,
+                               size=size,
+                               style=wx.TE_PROCESS_ENTER)
+            control.Bind(wx.EVT_TEXT_ENTER, self.update_object_on_enter, id=text.GetId())
         else:
-            try:
-                fvalue_text = self.format % fvalue
-            except (ValueError, TypeError) as e:
-                fvalue_text = ""
+            text = wx.TextCtrl(control, -1, fvalue_text, size=size)
 
+        text.Bind(wx.EVT_KILL_FOCUS, self.update_object_on_enter)
+        if self.factory.auto_set:
+            control.Bind(wx.EVT_TEXT, self.update_object_on_enter, id=text.GetId())
+        self.set_tooltip(text)
+
+        return text
+
+    def _do_layout(self, control):
+        raise NotImplementedError
+
+    def _set_format(self):
+        self.format = self.factory.format
+
+    def _set_value(self, value):
+        if self.evaluate is not None:
+            value = self.evaluate(value)
+        super()._set_value(value)
+
+    def _validate(self, value):
+        if self.low is not None and value < self.low:
+            message = "The value ({}) must be larger than {}!"
+            raise ValueError(message.format(value, self.low))
+        if self.high is not None and value > self.high:
+            message = "The value ({}) must be smaller than {}!"
+            raise ValueError(message.format(value, self.high))
+        if not self.factory.is_float and isinstance(value, float):
+            message = "The value must be an integer, but a value of {} was specified."
+            raise ValueError(message.format(value))
+
+    def _clip(self, fvalue, low, high):
+        """ Returns fvalue clipped between low and high"""
+#         try:
+#             1 // (low <= value <= high)
+#             text = self.format % fvalue
+#         except:
+#             text = ''
+#             fvalue = low
+#         return fvalue, text
+        try:
+            if not (low <= fvalue <= high):
+                fvalue = min(max(low, fvalue), high)
+        except:
+            fvalue = low
+        return fvalue
+
+    def update_object_on_enter(self, event):
+        """ Handles the user pressing the Enter key in the text field.
+        """
+        if isinstance(event, wx.FocusEvent):
+            event.Skip()
+
+        # it is possible we get the event after the control has gone away
+        if self.control is None:
+            return
+
+        try:
+            value = ast.literal_eval(self.control.text.GetValue())
+            self._validate(value)
+            self.value = value
+
+        except Exception as excp:
+            self.error(excp)
+            return
+
+        if not self.ui_changing:
+            self._set_slider(value)
+
+        self.control.text.SetBackgroundColour(OKColor)
+        self.control.text.Refresh()
+        if self._error is not None:
+            self._error = None
+            self.ui.errors -= 1
+
+    def error(self, excp):
+        """ Handles an error that occurs while setting the object's trait value.
+        """
+        if self._error is None:
+            self._error = True
+            self.ui.errors += 1
+            super().error(excp)
+        self.set_error_state(True)
+
+    def update_editor(self, value=None):
+        """ Updates the editor when the object trait changes externally to the
+            editor.
+        """
+        if value is None:
+            value = self.value
+        fvalue = self._clip(value, self.low, self.high)
+        text = self.format % fvalue
+
+        self.ui_changing = True
+        self.control.text.SetValue(text)
+        self.ui_changing = False
+        self._set_slider(fvalue)
+
+    def _set_slider(self, value):
+        """ Updates the slider range controls.
+        """
+        # Do nothing for non-sliders.
+
+    def _get_current_range(self):
+        low, high = self.low, self.high
+        return low, high
+
+    def get_error_control(self):
+        """ Returns the editor's control for indicating error status.
+        """
+        return self.control.text
+
+    def _low_changed(self, low):
+        if self.value < low:
+            self.value = float(low) if self.factory.is_float else int(low)
+
+        if self.control is not None:
+            self.update_editor()
+
+    def _high_changed(self, high):
+        if self.value > high:
+            self.value = float(high) if self.factory.is_float else int(high)
+
+        if self.control is not None:
+            self.update_editor()
+
+
+class SimpleSliderEditor(BaseRangeEditor):
+    """ Simple style of range editor that displays a slider and a text field.
+
+    The user can set a value either by moving the slider or by typing a value
+    in the text field.
+    """
+
+    # -------------------------------------------------------------------------
+    #  Trait definitions:  See BaseRangeEditor
+    # -------------------------------------------------------------------------
+
+    def _make_control(self, parent):
+
+        low, high = self._get_current_range()
+
+        self._set_format()
+
+        fvalue = self._clip(self.value, low, high)
+        fvalue_text = self.format % fvalue
+
+        size = self._get_default_size()
+
+        control = TraitsUIPanel(parent, -1)
+        control.label_lo = self._make_label_low(control, low, size)
+        control.slider = self._make_slider(control, fvalue)
+        control.label_hi = self._make_label_high(control, high, size)
+        control.text = self._make_text_entry(control, fvalue_text)
+        return control
+
+    @staticmethod
+    def _do_layout(control):
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(control.label_lo, 0, wx.ALIGN_CENTER)
+        sizer.Add(control.slider, 1, wx.EXPAND)
+        sizer.Add(control.label_hi, 0, wx.ALIGN_CENTER)
+        sizer.Add(control.text, 0, wx.LEFT | wx.EXPAND, 4)
+        control.SetSizerAndFit(sizer)
+
+    def _get_default_size(self):
+        if self.factory.label_width > 0:
+            return wx.Size(self.factory.label_width, 20)
+        return wx.DefaultSize
+
+    def _get_label_high(self, high):
+        if self.factory.high_name != "":
+            return self.format % high
+        return self.factory.high_label
+
+    def _get_label_low(self, low):
+        if self.factory.low_name != "":
+            return self.format % low
+        return self.factory.low_label
+
+    def _make_label_low(self, control, low, size):
+        label_low = self._get_label_low(low)
+        style = wx.ALIGN_RIGHT | wx.ST_NO_AUTORESIZE
+        label_lo = wx.StaticText(control, -1, label_low, size=size, style=style)
+        self.set_tooltip(label_lo)
+
+        return label_lo
+
+    def _make_slider(self, control, fvalue):
         ivalue = self._convert_to_slider(fvalue)
-
-        self._label_lo = wx.StaticText(
-            panel,
-            -1,
-            "999999",
-            size=size,
-            style=wx.ALIGN_RIGHT | wx.ST_NO_AUTORESIZE,
-        )
-        sizer.Add(self._label_lo, 0, wx.ALIGN_CENTER)
-        panel.slider = slider = Slider(
-            panel,
-            -1,
-            ivalue,
-            0,
-            10000,
-            size=wx.Size(80, 20),
-            style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS,
-        )
+        slider = Slider(control,
+                        -1,
+                        value=ivalue,
+                        minValue=0,
+                        maxValue=10000,
+                        size=wx.Size(80, 20),
+                        style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS)
         slider.SetTickFreq(1000)
         slider.SetValue(1)
         slider.SetPageSize(1000)
         slider.SetLineSize(100)
         slider.Bind(wx.EVT_SCROLL, self.update_object_on_scroll)
-        sizer.Add(slider, 1, wx.EXPAND)
-        self._label_hi = wx.StaticText(panel, -1, "999999", size=size)
-        sizer.Add(self._label_hi, 0, wx.ALIGN_CENTER)
-
-        panel.text = text = wx.TextCtrl(
-            panel,
-            -1,
-            fvalue_text,
-            size=wx.Size(56, 20),
-            style=wx.TE_PROCESS_ENTER,
-        )
-        panel.Bind(wx.EVT_TEXT_ENTER, self.update_object_on_enter, id=text.GetId())
-        text.Bind(wx.EVT_KILL_FOCUS, self.update_object_on_enter)
-
-        sizer.Add(text, 0, wx.LEFT | wx.EXPAND, 4)
-
-        low_label = factory.low_label
-        if factory.low_name != "":
-            low_label = self.format % self.low
-
-        high_label = factory.high_label
-        if factory.high_name != "":
-            high_label = self.format % self.high
-
-        self._label_lo.SetLabel(low_label)
-        self._label_hi.SetLabel(high_label)
         self.set_tooltip(slider)
-        self.set_tooltip(self._label_lo)
-        self.set_tooltip(self._label_hi)
-        self.set_tooltip(text)
 
-        # Set-up the layout:
-        panel.SetSizerAndFit(sizer)
+        return slider
+
+    def _make_label_high(self, control, high, size):
+        label_high = self._get_label_high(high)
+        label_hi = wx.StaticText(control, -1, label_high, size=size)
+        self.set_tooltip(label_hi)
+        return label_hi
 
     def update_object_on_scroll(self, event):
         """ Handles the user changing the current slider value.
         """
-        value = self._convert_from_slider(event.GetPosition())
         event_type = event.GetEventType()
         if (
             (event_type == wxEVT_SCROLL_ENDSCROLL)
@@ -201,6 +338,7 @@ class SimpleSliderEditor(BaseRangeEditor):
                 and (event_type == wx.wxEVT_SCROLL_THUMBRELEASE)
             )
         ):
+            value = self._convert_from_slider(event.GetPosition())
             try:
                 self.ui_changing = True
                 self.control.text.SetValue(self.format % value)
@@ -210,117 +348,31 @@ class SimpleSliderEditor(BaseRangeEditor):
             finally:
                 self.ui_changing = False
 
-    def update_object_on_enter(self, event):
-        """ Handles the user pressing the Enter key in the text field.
+    def _set_slider(self, value):
+        """ Updates the slider range controls.
         """
-        if isinstance(event, wx.FocusEvent):
-            event.Skip()
-
-        # There are cases where this method is called with self.control ==
-        # None.
-        if self.control is None:
-            return
-
-        try:
-            try:
-                value = self.control.text.GetValue().strip()
-                if self.factory.is_float:
-                    value = float(value)
-                else:
-                    value = int(value)
-            except Exception as ex:
-                # The user entered something that didn't eval as a number (e.g., 'foo').
-                # Pretend it didn't happen (i.e. do not change self.value).
-                value = self.value
-                self.control.text.SetValue(str(value))
-                # for compound editor, value may be non-numeric
-                if not isinstance(value, (int, float)):
-                    return
-
-            self.value = value
-            if not self.ui_changing:
-                self.control.slider.SetValue(
-                    self._convert_to_slider(self.value)
-                )
-            self.control.text.SetBackgroundColour(OKColor)
-            self.control.text.Refresh()
-            if self._error is not None:
-                self._error = None
-                self.ui.errors -= 1
-        except TraitError:
-            pass
-
-    def error(self, excp):
-        """ Handles an error that occurs while setting the object's trait value.
-        """
-        if self._error is None:
-            self._error = True
-            self.ui.errors += 1
-            super(SimpleSliderEditor, self).error(excp)
-        self.set_error_state(True)
-
-    def update_editor(self):
-        """ Updates the editor when the object trait changes externally to the
-            editor.
-        """
-        value = self.value
-        try:
-            text = self.format % value
-            1 // (self.low <= value <= self.high)
-        except:
-            text = ""
-            value = self.low
-
+        low, high = self._get_current_range()
+        self.control.label_lo.SetLabel(self.format % low)
+        self.control.label_hi.SetLabel(self.format % high)
         ivalue = self._convert_to_slider(value)
-        self.control.text.SetValue(text)
         self.control.slider.SetValue(ivalue)
 
     def _convert_to_slider(self, value):
         """ Returns the slider setting corresponding to the user-supplied value.
         """
-        if self.high > self.low:
-            ivalue = int(
-                (float(value - self.low) / (self.high - self.low)) * 10000.0
-            )
-        else:
-            ivalue = self.low
-        return ivalue
+        low, high = self._get_current_range()
+        if high > low:
+            return int((float(value - low) / (high - low)) * 10000.0)
+        return low
 
     def _convert_from_slider(self, ivalue):
-        """ Returns the float or integer value corresponding to the slider
-        setting.
+        """ Returns the float or integer value corresponding to the slider setting.
         """
-        value = self.low + ((float(ivalue) / 10000.0) * (self.high - self.low))
+        low, high = self._get_current_range()
+        value = low + ((float(ivalue) / 10000.0) * (high - low))
         if not self.factory.is_float:
             value = int(round(value))
         return value
-
-    def get_error_control(self):
-        """ Returns the editor's control for indicating error status.
-        """
-        return self.control.text
-
-    def _low_changed(self, low):
-        if self.value < low:
-            if self.factory.is_float:
-                self.value = float(low)
-            else:
-                self.value = int(low)
-
-        if self._label_lo is not None:
-            self._label_lo.SetLabel(self.format % low)
-            self.update_editor()
-
-    def _high_changed(self, high):
-        if self.value > high:
-            if self.factory.is_float:
-                self.value = float(high)
-            else:
-                self.value = int(high)
-
-        if self._label_hi is not None:
-            self._label_hi.SetLabel(self.format % high)
-            self.update_editor()
 
 
 # -------------------------------------------------------------------------
@@ -332,479 +384,355 @@ class LogRangeSliderEditor(SimpleSliderEditor):
     def _convert_to_slider(self, value):
         """ Returns the slider setting corresponding to the user-supplied value.
         """
-        value = max(value, self.low)
-        ivalue = int(
-            (log10(value) - log10(self.low))
-            / (log10(self.high) - log10(self.low))
-            * 10000.0
-        )
-        return ivalue
+        low, high = self._get_current_range()
+        value = max(value, low)
+        return int((log10(value) - log10(low)) / (log10(high) - log10(low)) * 10000.0)
 
     def _convert_from_slider(self, ivalue):
-        """ Returns the float or integer value corresponding to the slider
-        setting.
+        """ Returns the float or integer value corresponding to the slider setting.
         """
-        value = float(ivalue) / 10000.0 * (log10(self.high) - log10(self.low))
+        low, high = self._get_current_range()
+        value = float(ivalue) / 10000.0 * (log10(high) - log10(low))
         # Do this to handle floating point errors, where fvalue may exceed
         # self.high.
-        fvalue = min(self.low * 10 ** (value), self.high)
+        fvalue = min(low * 10 ** (value), high)
         if not self.factory.is_float:
             fvalue = int(round(fvalue))
         return fvalue
 
 
-class LargeRangeSliderEditor(BaseRangeEditor):
+class LargeRangeSliderEditor(SimpleSliderEditor):
     """ A slider editor for large ranges.
 
-       The editor displays a slider and a text field. A subset of the total
-       range is displayed in the slider; arrow buttons at each end of the
-       slider let the user move the displayed range higher or lower.
+    The editor displays a slider and a text field. A subset of the total
+    range is displayed in the slider; arrow buttons at each end of the
+    slider let the user move the displayed range higher or lower.
     """
 
     # -------------------------------------------------------------------------
-    #  Trait definitions:
+    #  Trait definitions: See BaseRangeEditor
     # -------------------------------------------------------------------------
 
-    #: Low value for the slider range
-    low = Any(0)
-
-    #: High value for the slider range
-    high = Any(1)
-
-    #: Low end of displayed range
+    #: Low end of displayed slider range
     cur_low = Float()
 
-    #: High end of displayed range
+    #: High end of displayed slider range
     cur_high = Float()
-
-    #: Flag indicating that the UI is in the process of being updated
-    ui_changing = Bool(False)
 
     def init(self, parent):
         """ Finishes initializing the editor by creating the underlying toolkit
             widget.
         """
-        factory = self.factory
-
-        # Initialize using the factory range defaults:
-        self.low = factory.low
-        self.high = factory.high
-        self.evaluate = factory.evaluate
-
-        # Hook up the traits to listen to the object.
-        self.sync_value(factory.low_name, "low", "from")
-        self.sync_value(factory.high_name, "high", "from")
-        self.sync_value(factory.evaluate_name, "evaluate", "from")
-
-        self.init_range()
-        low = self.cur_low
-        high = self.cur_high
-
-        self._set_format()
-        self.control = panel = TraitsUIPanel(parent, -1)
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
-        fvalue = self.value
-        try:
-            fvalue_text = self._format % fvalue
-            1 // (low <= fvalue <= high)
-        except:
-            fvalue_text = ""
-            fvalue = low
-
-        if high > low:
-            ivalue = int((float(fvalue - low) / (high - low)) * 10000)
-        else:
-            ivalue = low
-
-        # Lower limit label:
-        label_lo = wx.StaticText(panel, -1, "999999")
-        panel.label_lo = label_lo
-        sizer.Add(label_lo, 2, wx.ALIGN_CENTER)
-
-        # Lower limit button:
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_BACK, size=(15, 15))
-        button_lo = wx.BitmapButton(
-            panel,
-            -1,
-            bitmap=bmp,
-            size=(-1, 20),
-            style=wx.BU_EXACTFIT | wx.NO_BORDER,
-        )
-        panel.button_lo = button_lo
-        button_lo.Bind(wx.EVT_BUTTON, self.reduce_range)
-        sizer.Add(button_lo, 1, wx.ALIGN_CENTER)
-
-        # Slider:
-        panel.slider = slider = Slider(
-            panel,
-            -1,
-            ivalue,
-            0,
-            10000,
-            size=wx.Size(80, 20),
-            style=wx.SL_HORIZONTAL | wx.SL_AUTOTICKS,
-        )
-        slider.SetTickFreq(1000)
-        slider.SetValue(1)
-        slider.SetPageSize(1000)
-        slider.SetLineSize(100)
-        slider.Bind(wx.EVT_SCROLL, self.update_object_on_scroll)
-        sizer.Add(slider, 6, wx.EXPAND)
-
-        # Upper limit button:
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, size=(15, 15))
-        button_hi = wx.BitmapButton(
-            panel,
-            -1,
-            bitmap=bmp,
-            size=(-1, 20),
-            style=wx.BU_EXACTFIT | wx.NO_BORDER,
-        )
-        panel.button_hi = button_hi
-        button_hi.Bind(wx.EVT_BUTTON, self.increase_range)
-        sizer.Add(button_hi, 1, wx.ALIGN_CENTER)
-
-        # Upper limit label:
-        label_hi = wx.StaticText(panel, -1, "999999")
-        panel.label_hi = label_hi
-        sizer.Add(label_hi, 2, wx.ALIGN_CENTER)
-
-        # Text entry:
-        panel.text = text = wx.TextCtrl(
-            panel,
-            -1,
-            fvalue_text,
-            size=wx.Size(56, 20),
-            style=wx.TE_PROCESS_ENTER,
-        )
-        panel.Bind(wx.EVT_TEXT_ENTER, self.update_object_on_enter, id=text.GetId())
-        text.Bind(wx.EVT_KILL_FOCUS, self.update_object_on_enter)
-
-        sizer.Add(text, 0, wx.LEFT | wx.EXPAND, 4)
-
+        self._init_with_factory_defaults()
+        self.init_current_range(self.value)
+        self.control = self._make_control(parent)
         # Set-up the layout:
-        panel.SetSizerAndFit(sizer)
-        label_lo.SetLabel(str(low))
-        label_hi.SetLabel(str(high))
-        self.set_tooltip(slider)
-        self.set_tooltip(label_lo)
-        self.set_tooltip(label_hi)
-        self.set_tooltip(text)
+        self._do_layout(self.control)
 
-        # Update the ranges and button just in case.
-        self.update_range_ui()
+    def _make_control(self, parent):
+        control = super()._make_control(parent)
+        low, high = self._get_current_range()
 
-    def update_object_on_scroll(self, event):
-        """ Handles the user changing the current slider value.
-        """
-        low = self.cur_low
-        high = self.cur_high
-        value = low + ((float(event.GetPosition()) / 10000.0) * (high - low))
-        self.control.text.SetValue(self._format % value)
-        event_type = event.GetEventType()
-        try:
-            self.ui_changing = True
-            if (
-                (event_type == wxEVT_SCROLL_ENDSCROLL)
-                or (
-                    self.factory.auto_set
-                    and (event_type == wx.wxEVT_SCROLL_THUMBTRACK)
-                )
-                or (
-                    self.factory.enter_set
-                    and (event_type == wx.wxEVT_SCROLL_THUMBRELEASE)
-                )
-            ):
-                if self.factory.is_float:
-                    self.value = value
-                else:
-                    self.value = int(value)
-        finally:
-            self.ui_changing = False
+        control.button_lo = self._make_button_low(control, low)
+        control.button_hi = self._make_button_high(control, high)
+        return control
 
-    def update_object_on_enter(self, event):
-        """ Handles the user pressing the Enter key in the text field.
-        """
-        if isinstance(event, wx.FocusEvent):
-            event.Skip()
-        try:
-            value = self.control.text.GetValue().strip()
-            try:
-                if self.factory.is_float:
-                    value = float(value)
-                else:
-                    value = int(value)
-            except Exception as ex:
-                # The user entered something that didn't eval as a number (e.g., 'foo').
-                # Pretend it didn't happen (i.e. do not change self.value).
-                value = self.value
-                self.control.text.SetValue(str(value))
+    @staticmethod
+    def _do_layout(control):
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(control.label_lo, 2, wx.ALIGN_CENTER)
+        sizer.Add(control.button_lo, 1, wx.ALIGN_CENTER)
+        sizer.Add(control.slider, 6, wx.EXPAND)
+        sizer.Add(control.button_hi, 1, wx.ALIGN_CENTER)
+        sizer.Add(control.label_hi, 2, wx.ALIGN_CENTER)
+        sizer.Add(control.text, 0, wx.LEFT | wx.EXPAND, 4)
+        control.SetSizerAndFit(sizer)
 
-            self.value = value
-            self.control.text.SetBackgroundColour(OKColor)
-            self.control.text.Refresh()
-            # Update the slider range.
-            # Set ui_changing to True to avoid recursion:
-            # the update_range_ui method will try to set the value in the text
-            # box, which will again fire this method if auto_set is True.
-            if not self.ui_changing:
-                self.ui_changing = True
-                self.init_range()
-                self.update_range_ui()
-                self.ui_changing = False
-            if self._error is not None:
-                self._error = None
-                self.ui.errors -= 1
-        except TraitError as excp:
-            pass
+    def _make_button_low(self, control, low):
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_BACK, size=(15, 15))
+        button_lo = wx.BitmapButton(control,
+                                    -1,
+                                    bitmap=bmp,
+                                    size=(-1, 20),
+                                    style=wx.BU_EXACTFIT | wx.NO_BORDER,
+                                    name="button_lo")
+        button_lo.Bind(wx.EVT_BUTTON, self.reduce_range)
+        button_lo.Enable(low != self.low)
+        return button_lo
 
-    def error(self, excp):
-        """ Handles an error that occurs while setting the object's trait value.
-        """
-        if self._error is None:
-            self._error = True
-            self.ui.errors += 1
-            super(LargeRangeSliderEditor, self).error(excp)
-        self.set_error_state(True)
+    def _make_button_high(self, control, high):
 
-    def update_editor(self):
-        """ Updates the editor when the object trait changes externally to the
-            editor.
-        """
-        value = self.value
-        low = self.low
-        high = self.high
-        try:
-            text = self._format % value
-            1 / (low <= value <= high)
-        except:
-            value = low
-        self.value = value
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, size=(15, 15))
+        button_hi = wx.BitmapButton(control,
+                                    -1,
+                                    bitmap=bmp,
+                                    size=(-1, 20),
+                                    style=wx.BU_EXACTFIT | wx.NO_BORDER,
+                                    name="button_hi")
+        button_hi.Bind(wx.EVT_BUTTON, self.increase_range)
+        button_hi.Enable(high != self.high)
+        return button_hi
 
-        if not self.ui_changing:
-            self.init_range()
-            self.update_range_ui()
-
-    def update_range_ui(self):
+    def _set_slider(self, value):
         """ Updates the slider range controls.
         """
-        low, high = self.cur_low, self.cur_high
-        value = self.value
-        self._set_format()
-        self.control.label_lo.SetLabel(self._format % low)
-        self.control.label_hi.SetLabel(self._format % high)
-        if high > low:
-            ivalue = int((float(value - low) / (high - low)) * 10000.0)
-        else:
-            ivalue = low
+        low, high = self._get_current_range()
+        if not low <= value <= high:
+            low, high = self.init_current_range(value)
+
+        ivalue = self._convert_to_slider(value)
         self.control.slider.SetValue(ivalue)
-        text = self._format % self.value
-        self.control.text.SetValue(text)
-        factory = self.factory
-        f_low, f_high = self.low, self.high
 
-        if low == f_low:
-            self.control.button_lo.Disable()
-        else:
-            self.control.button_lo.Enable()
+        self._set_format()
+        self.control.label_lo.SetLabel(self.format % low)
+        self.control.label_hi.SetLabel(self.format % high)
+        self.control.button_lo.Enable(low != self.low)
+        self.control.button_hi.Enable(high != self.high)
 
-        if high == f_high:
-            self.control.button_hi.Disable()
-        else:
-            self.control.button_hi.Enable()
-
-    def init_range(self):
-        """ Initializes the slider range controls.
+    def init_current_range(self, value):
+        """ Initializes the current slider range controls, cur_low and cur_high.
         """
-        value = self.value
-        factory = self.factory
         low, high = self.low, self.high
-        if (high is None) and (low is not None):
-            high = -low
+#         if (high is None) and (low is not None):
+#             high = -low
+        mag = max(abs(value), 1)
+        rounded_value = 10 ** int(log10(mag))
+        fact_hi, fact_lo = (10, 1) if value >= 0 else (-1, -10)
+        cur_low = rounded_value * fact_lo
+        cur_high = rounded_value * fact_hi
+        if mag <= 10:
+            if value >= 0:
+                cur_low *= -1
+            else:
+                cur_high *= -1
 
-        mag = abs(value)
-        if mag <= 10.0:
-            cur_low = max(value - 10, low)
-            cur_high = min(value + 10, high)
-        else:
-            d = 0.5 * (10 ** int(log10(mag) + 1))
-            cur_low = max(low, value - d)
-            cur_high = min(high, value + d)
-
-        self.cur_low, self.cur_high = cur_low, cur_high
+        self.cur_low, self.cur_high = max(cur_low, low), min(cur_high, high)
+        return self.cur_low, self.cur_high
 
     def reduce_range(self, event):
         """ Reduces the extent of the displayed range.
         """
-        factory = self.factory
-        low, high = self.low, self.high
-        if abs(self.cur_low) < 10:
-            self.cur_low = max(-10, low)
-            self.cur_high = min(10, high)
-        elif self.cur_low > 0:
-            self.cur_high = self.cur_low
-            self.cur_low = max(low, self.cur_low / 10)
-        else:
-            self.cur_high = self.cur_low
-            self.cur_low = max(low, self.cur_low * 10)
+        value = self.value
+        low = self.low
 
-        self.ui_changing = True
-        self.value = min(max(self.value, self.cur_low), self.cur_high)
-        self.ui_changing = False
-        self.update_range_ui()
+        old_cur_low = self.cur_low
+        if abs(self.cur_low) < 10:
+            value = value - 10
+            self.cur_low = max(-10, low)
+            if old_cur_low - self.cur_low > 9:
+                self.cur_high = old_cur_low
+        else:
+            fact = 0.1 if self.cur_low > 0 else 10
+            value = value * fact
+            new_cur_low = self.cur_low * fact
+            self.cur_low = max(low, new_cur_low)
+            if self.cur_low == new_cur_low:
+                self.cur_high = old_cur_low
+
+        value = min(max(value, self.cur_low), self.cur_high)
+
+        if self.factory.is_float is False:
+            value = int(value)
+        self.value = value
+        self.update_editor()
 
     def increase_range(self, event):
         """ Increased the extent of the displayed range.
         """
-        factory = self.factory
-        low, high = self.low, self.high
+        value = self.value
+        high = self.high
+        old_cur_high = self.cur_high
         if abs(self.cur_high) < 10:
-            self.cur_low = max(-10, low)
+            value = value + 10
             self.cur_high = min(10, high)
-        elif self.cur_high > 0:
-            self.cur_low = self.cur_high
-            self.cur_high = min(high, self.cur_high * 10)
+            if self.cur_high - old_cur_high > 9:
+                self.cur_low = old_cur_high
         else:
-            self.cur_low = self.cur_high
-            self.cur_high = min(high, self.cur_high / 10)
+            fact = 10 if self.cur_high > 0 else 0.1
+            value = value * fact
+            new_cur_high = self.cur_high * fact
+            self.cur_high = min(high, new_cur_high)
+            if self.cur_high == new_cur_high:
+                self.cur_low = old_cur_high
 
-        self.ui_changing = True
-        self.value = min(max(self.value, self.cur_low), self.cur_high)
-        self.ui_changing = False
-        self.update_range_ui()
+        value = min(max(value, self.cur_low), self.cur_high)
+
+        if self.factory.is_float is False:
+            value = int(value)
+
+        self.value = value
+        self.update_editor()
 
     def _set_format(self):
-        self._format = "%d"
-        factory = self.factory
-        low, high = self.cur_low, self.cur_high
-        diff = high - low
-        if factory.is_float:
+        self.format = "%d"
+        if self.factory.is_float:
+            low, high = self._get_current_range()
+            diff = high - low
             if diff > 99999:
-                self._format = "%.2g"
+                self.format = "%.2g"
             elif diff > 1:
-                self._format = "%%.%df" % max(0, 4 - int(log10(high - low)))
+                self.format = "%%.%df" % max(0, 4 - int(log10(diff)))
             else:
-                self._format = "%.3f"
+                self.format = "%.3f"
 
-    def get_error_control(self):
-        """ Returns the editor's control for indicating error status.
-        """
-        return self.control.text
-
-    def _low_changed(self, low):
-        if self.control is not None:
-            if self.value < low:
-                if self.factory.is_float:
-                    self.value = float(low)
-                else:
-                    self.value = int(low)
-
-            self.update_editor()
-
-    def _high_changed(self, high):
-        if self.control is not None:
-            if self.value > high:
-                if self.factory.is_float:
-                    self.value = float(high)
-                else:
-                    self.value = int(high)
-
-            self.update_editor()
+    def _get_current_range(self):
+        low, high = self.cur_low, self.cur_high
+        return low, high
 
 
 class SimpleSpinEditor(BaseRangeEditor):
     """ A simple style of range editor that displays a spin box control.
+
+    - ``Shift`` + arrow = 2 * increment        (or ``Shift`` + mouse wheel);
+    - ``Ctrl``  + arrow = 10 * increment       (or ``Ctrl`` + mouse wheel);
+    - ``Alt``   + arrow = 100 * increment      (or ``Alt`` + mouse wheel);
+    - Combinations of ``Shift``, ``Ctrl``, ``Alt`` increment the
+      :class:`SimpleSpinEditor` value by the product of the factors;
+
     """
 
     # -------------------------------------------------------------------------
     #  Trait definitions:
     # -------------------------------------------------------------------------
 
-    #: Low value for the slider range
-    low = Any()
+#     #: Low value for the slider range
+#     low = Any()
+#
+#     #: High value for the slider range
+#     high = Any()
 
-    #: High value for the slider range
-    high = Any()
+    #: Step value for the spinner
+    step = Any(1)
 
     def init(self, parent):
         """ Finishes initializing the editor by creating the underlying toolkit
             widget.
         """
-        factory = self.factory
-        if not factory.low_name:
-            self.low = factory.low
+        self._init_with_factory_defaults()
+        self.control = self._make_control(parent)
+        self._do_layout(self.control)
 
-        if not factory.high_name:
-            self.high = factory.high
+    def _make_control(self, parent):
+        # control = super()._make_control(parent)
+        low, high = self._get_current_range()
 
-        self.sync_value(factory.low_name, "low", "from")
-        self.sync_value(factory.high_name, "high", "from")
-        low = self.low
-        high = self.high
-        self.control = wx.SpinCtrl(
-            parent, -1, self.str_value, min=low, max=high, initial=self.value
-        )
-        parent.Bind(wx.EVT_SPINCTRL, self.update_object, id=self.control.GetId())
-        if wx.VERSION < (3, 0):
-            parent.Bind(wx.EVT_TEXT, self.update_object, id=self.control.GetId())
-        self.set_tooltip()
+        self._set_format()
 
-    def update_object(self, event):
-        """ Handles the user selecting a new value in the spin box.
+        fvalue = self._clip(self.value, low, high)
+        fvalue_text = self.format % fvalue
+
+        control = TraitsUIPanel(parent, -1)
+        control.text = self._make_text_entry(control, fvalue_text)
+        control.button_lo = self._make_button_low(control, fvalue)
+        control.button_hi = self._make_button_high(control, fvalue)
+        return control
+
+    def _make_text_entry(self, control, fvalue_text):
+        text = super()._make_text_entry(control, fvalue_text)
+        text.Bind(wx.EVT_MOUSEWHEEL, self.on_mouse_wheel)
+        return text
+
+    @staticmethod
+    def _do_layout(control):
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(control.text, 12, wx.LEFT | wx.EXPAND)
+        vsizer = wx.BoxSizer(wx.VERTICAL)
+        vsizer.Add(control.button_hi, 1, wx.ALIGN_CENTER)
+        vsizer.Add(control.button_lo, 1, wx.ALIGN_CENTER)
+        sizer.Add(vsizer, 1, wx.ALIGN_RIGHT)
+        control.SetSizerAndFit(sizer)
+
+    def _make_button_low(self, control, value):
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_DOWN, size=(15, 10))
+        button_lo = wx.BitmapButton(control,
+                                    -1,
+                                    bitmap=bmp,
+                                    size=(15, 12),
+                                    style=wx.BU_EXACTFIT | wx.NO_BORDER,
+                                    name="button_lo")
+        # button_lo.Bind(wx.EVT_BUTTON, self.spin_down)
+        button_lo.Bind(wx.EVT_LEFT_DOWN, self.spin_down)
+        button_lo.Bind(wx.EVT_MOUSEWHEEL, self.on_mouse_wheel)
+        button_lo.Enable(self.low < value)
+        return button_lo
+
+    def _make_button_high(self, control, value):
+
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_UP, size=(15, 10))
+        button_hi = wx.BitmapButton(control,
+                                    -1,
+                                    bitmap=bmp,
+                                    size=(15, 12),
+                                    style=wx.BU_EXACTFIT | wx.NO_BORDER,
+                                    name="button_hi")
+        # button_hi.Bind(wx.EVT_BUTTON, self.spin_up)
+        button_hi.Bind(wx.EVT_LEFT_DOWN, self.spin_up)
+        button_hi.Bind(wx.EVT_MOUSEWHEEL, self.on_mouse_wheel)
+        button_hi.Enable(value < self.high)
+        return button_hi
+
+    def _spin(self, step):
+        value = self.value
+        low, high = self._get_current_range()
+
+        value = min(max(value + step, low), high)
+
+        if self.factory.is_float is False:
+            value = int(value)
+        self.value = value
+        self.update_editor()
+
+    def _get_modifier(self, event):
+        step = self.step
+        modifier = FixedPoint(str(step), 20)
+        if event.ShiftDown():
+            modifier *= 2.0
+        if event.ControlDown():
+            modifier *= 10.0
+        if event.AltDown():
+            modifier *= 100.0
+        return modifier
+
+    def spin_down(self, event):
+        """ Reduces the extent of the displayed range.
         """
-        if self.control is None:
-            return
-        self._locked = True
-        try:
-            self.value = self.control.GetValue()
-        finally:
-            self._locked = False
+        step = -1 * self._get_modifier(event)
+        self._spin(step)
 
-    def update_editor(self):
-        """ Updates the editor when the object trait changes externally to the
-            editor.
+    def spin_up(self, event):
+        """ Increased the extent of the displayed range.
         """
-        if not self._locked:
-            try:
-                self.control.SetValue(int(self.value))
-            except:
-                pass
+        step = self._get_modifier(event)
+        self._spin(step)
 
-    def _low_changed(self, low):
-        if self.value < low:
-            if self.factory.is_float:
-                self.value = float(low)
-            else:
-                self.value = int(low)
-        if self.control:
-            self.control.SetRange(self.low, self.high)
-            self.control.SetValue(int(self.value))
+    def on_mouse_wheel(self, event):
+        sign = -1 if event.WheelRotation < 0 else 1
+        step = sign * self._get_modifier(event)
+        self._spin(step)
 
-    def _high_changed(self, high):
-        if self.value > high:
-            if self.factory.is_float:
-                self.value = float(high)
-            else:
-                self.value = int(high)
-        if self.control:
-            self.control.SetRange(self.low, self.high)
-            self.control.SetValue(int(self.value))
+    def _set_slider(self, value):
+        """ Updates the slider range controls.
+        """
+        low, high = self._get_current_range()
+        self.control.button_lo.Enable(low < value)
+        self.control.button_hi.Enable(value < high)
 
 
 class RangeTextEditor(TextEditor):
-    """ Editor for ranges that displays a text field. If the user enters a
-        value that is outside the allowed range, the background of the field
-        changes color to indicate an error.
+    """Editor for ranges that displays a text field.
+
+    If the user enters a value that is outside the allowed range,
+    the background of the field changes color to indicate an error.
     """
 
     # -------------------------------------------------------------------------
     #  Trait definitions:
     # -------------------------------------------------------------------------
 
-    #: Low value for the slider range
+    #: Low value for the range
     low = Any()
 
-    #: High value for the slider range
+    #: High value for the range
     high = Any()
 
     #: Function to evaluate floats/ints
@@ -814,6 +742,7 @@ class RangeTextEditor(TextEditor):
         """ Finishes initializing the editor by creating the underlying toolkit
             widget.
         """
+        super().init(parent)
         if not self.factory.low_name:
             self.low = self.factory.low
 
@@ -823,30 +752,25 @@ class RangeTextEditor(TextEditor):
         self.sync_value(self.factory.low_name, "low", "from")
         self.sync_value(self.factory.high_name, "high", "from")
 
-        if self.factory.enter_set:
-            control = wx.TextCtrl(
-                parent, -1, self.str_value, style=wx.TE_PROCESS_ENTER
-            )
-            parent.Bind(wx.EVT_TEXT_ENTER, self.update_object, id=control.GetId())
-        else:
-            control = wx.TextCtrl(parent, -1, self.str_value)
-
-        control.Bind(wx.EVT_KILL_FOCUS, self.update_object)
-
-        if self.factory.auto_set:
-            parent.Bind(wx.EVT_TEXT, self.update_object, id=control.GetId())
-
         self.evaluate = self.factory.evaluate
         self.sync_value(self.factory.evaluate_name, "evaluate", "from")
 
-        self.control = control
-        self.set_tooltip()
+    def _validate(self, value):
+        if self.low is not None and value < self.low:
+            message = "The value ({}) must be larger than {}!"
+            raise ValueError(message.format(value, self.low))
+        if self.high is not None and value > self.high:
+            message = "The value ({}) must be smaller than {}!"
+            raise ValueError(message.format(value, self.high))
+        if not self.factory.is_float and isinstance(value, float):
+            message = "The value must be an integer, but a value of {} was specified."
+            raise ValueError(message.format(value))
 
     def update_object(self, event):
         """ Handles the user entering input data in the edit control.
         """
         if isinstance(event, wx.FocusEvent):
-            event.Skip()
+            event.Skip(False) # False
 
         # There are cases where this method is called with self.control ==
         # None.
@@ -855,36 +779,26 @@ class RangeTextEditor(TextEditor):
 
         value = self.control.GetValue()
 
-        # Try to convert the string value entered by the user to a numerical
-        # value.
+        # Try to convert the string value entered by the user to a numerical value.
+
         try:
             if self.evaluate is not None:
                 value = self.evaluate(value)
             else:
-                if self.factory.is_float:
-                    value = float(value)
-                else:
-                    value = int(value)
+                value = ast.literal_eval(value)
+
+            self._validate(value)
+            self.value = value
         except Exception as excp:
             # The conversion failed.
             self.error(excp)
             return
 
-        if value < self.low or value > self.high:
-            self.set_error_state(True)
-            return
-
-        # Try to assign the numerical value to the trait.
-        # This may fail because of constraints on the trait.
-        try:
-            self.value = value
-            self.control.SetBackgroundColour(OKColor)
-            self.control.Refresh()
-            if self._error is not None:
-                self._error = None
-                self.ui.errors -= 1
-        except TraitError as excp:
-            pass
+        self.control.SetBackgroundColour(OKColor)
+        self.control.Refresh()
+        if self._error is not None:
+            self._error = None
+            self.ui.errors -= 1
 
     def error(self, excp):
         """ Handles an error that occurs while setting the object's trait value.
@@ -892,7 +806,7 @@ class RangeTextEditor(TextEditor):
         if self._error is None:
             self._error = True
             self.ui.errors += 1
-            super(RangeTextEditor, self).error(excp)
+            super().error(excp)
         self.set_error_state(True)
 
     def _low_changed(self, low):
@@ -902,7 +816,7 @@ class RangeTextEditor(TextEditor):
             else:
                 self.value = int(low)
         if self.control:
-            self.control.SetValue(int(self.value))
+            self.control.SetValue(str(self.value))
 
     def _high_changed(self, high):
         if self.value > high:
@@ -911,7 +825,12 @@ class RangeTextEditor(TextEditor):
             else:
                 self.value = int(high)
         if self.control:
-            self.control.SetValue(int(self.value))
+            self.control.SetValue(str(self.value))
+
+
+# -------------------------------------------------------------------------
+#  'SimpleEnumEditor' factory adaptor:
+# -------------------------------------------------------------------------
 
 
 def SimpleEnumEditor(parent, factory, ui, object, name, description):

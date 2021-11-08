@@ -328,7 +328,7 @@ class TraitsUIPanel(wx.Panel):
             the same as its parents.
         """
         bg_color = kw.pop("bg_color", None)
-        wx.Panel.__init__(self, parent, *args, **kw)
+        super().__init__(parent, *args, **kw)
 
         self.Bind(wx.EVT_CHILD_FOCUS, self.OnChildFocus)
 

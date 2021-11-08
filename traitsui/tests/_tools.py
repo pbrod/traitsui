@@ -160,23 +160,95 @@ def get_children(node):
         return node.children()
 
 
+def set_spinctrl_text(ui, text):
+    set_text(ui, text, name="wxSpinCtrl")
+
+
+def set_text(ui, text, name='text'):
+    """
+    Find "text", "choice", "wxSpinCtrl" or "wxSpinCtrlDouble" object and sets its value to text.
+
+    Parameters
+    ----------
+    ui: user interface object
+        must contain ui.control object.
+    text: string
+        text string to set
+    name: "text" or "wxSpinCtrl" or "wxSpinCtrlDouble" or "choice"
+        name to the object to find. (Only used for the wx-backend)
+    """
+    if is_current_backend_wx():
+        import wx
+        # wx_print_names(ui.control)
+        # textctrl0 = ui.control.FindWindowByName("text")
+        ctrl = ui.control.FindWindowByName(name, ui.control)
+        valid_controls = {"wxSpinCtrl", "wxSpinCtrlDouble", "choice"}
+        if name in valid_controls or ctrl is None:
+            if ctrl is None:
+                names = list(valid_controls.difference([name]))
+                for name in names:
+                    ctrl = ui.control.FindWindowByName(name, ui.control)
+                    if ctrl is not None:
+                        break
+                else:
+                    raise ValueError("No valid control object found!")
+            ctrl.SetFocusFromKbd()
+            # on Windows, a wxSpinCtrl does not have children, and we cannot do
+            # the more fine-grained testing below
+            if len(ctrl.GetChildren()) != 0:
+                # TextCtrl object of the ctrl control
+                ctrl = ctrl.FindWindowByName("text", ctrl)
+                ctrl.SetFocus()
+
+        else:
+            ctrl.SetFocus()
+
+        if name == 'choice':
+            # pylint: disable=no-member
+            click_event = wx.CommandEvent(wx.wxEVT_CHOICE, id=ctrl.GetId())
+            click_event.SetString(text)
+            ctrl.ProcessEvent(click_event)
+        else:
+            ctrl.SetValue(text)
+        # click_event = wx.CommandEvent(wx.wxEVT_COMMAND_ENTER, id=ctrl.GetId())
+        # ctrl.ProcessEvent(click_event)
+
+    elif is_current_backend_qt4():
+        from pyface import qt
+        lineedit = ui.control.findChild(qt.QtGui.QLineEdit)
+        if lineedit is None:
+            lineedit = ui.control.findChild(qt.QtGui.QComboBox)
+            for i in range(lineedit.count()):
+                if text == lineedit.itemText(i):
+                    # lineedit.currentIndexChanged(i)
+                    lineedit.setCurrentIndex(i)
+                break
+            else:
+                raise ValueError('The value "{}" is not a valid enumeration item!'.format(text))
+        else:
+            lineedit.setFocus()
+            lineedit.setText(text)
+            lineedit.editingFinished.emit()
+
+
 def press_ok_button(ui):
     """Press the OK button in a wx or qt dialog."""
 
     if is_current_backend_wx():
         import wx
-
-        ok_button = ui.control.FindWindowByName("button", ui.control)
-        click_event = wx.CommandEvent(
-            wx.wxEVT_COMMAND_BUTTON_CLICKED, ok_button.GetId()
-        )
+        ok_button = ui.control.FindWindowByLabel("OK", ui.control)
+        click_event = wx.CommandEvent(wx.wxEVT_COMMAND_BUTTON_CLICKED,
+                                      id=ok_button.GetId())
         ok_button.ProcessEvent(click_event)
 
     elif is_current_backend_qt4():
         from pyface import qt
 
         # press the OK button and close the dialog
-        ok_button = ui.control.findChild(qt.QtGui.QPushButton)
+        for button in ui.control.findChildren(qt.QtGui.QPushButton):
+            if button.text().lower() == 'ok':
+                ok_button = button
+                break
         ok_button.click()
 
 

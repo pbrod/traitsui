@@ -109,12 +109,28 @@ class TextEditor(Editor):
         """ Finishes initializing the editor by creating the underlying toolkit
             widget.
         """
-        self.control = wx.TextCtrl(
-            parent, -1, self.str_value, style=wx.TE_PROCESS_ENTER
-        )
-        self.control.Bind(wx.EVT_KILL_FOCUS, self.update_object)
-        parent.Bind(wx.EVT_TEXT_ENTER, self.update_object, id=self.control.GetId())
+        self.control = self._make_control(parent)
+
+    def _make_control(self, parent):
+        if self.factory.enter_set:
+            options = dict(style=wx.TE_PROCESS_ENTER)
+            control = wx.TextCtrl(parent, -1, self.str_value, **options)
+            parent.Bind(wx.EVT_TEXT_ENTER, self.update_object, id=control.GetId())
+        else:
+            control = wx.TextCtrl(parent, -1, self.str_value)
+        control.Bind(wx.EVT_KILL_FOCUS, self.update_object)
+        if self.factory.auto_set:
+            parent.Bind(wx.EVT_TEXT, self.update_object, id=control.GetId())
         self.set_tooltip()
+        return control
+# Old call
+#         self.control = wx.TextCtrl(
+#             parent, -1, self.str_value, style=wx.TE_PROCESS_ENTER
+#         )
+#         self.control.Bind(wx.EVT_KILL_FOCUS, self.update_object)
+#         parent.Bind(wx.EVT_TEXT_ENTER, self.update_object, id=self.control.GetId())
+#         self.set_tooltip()
+
 
     def update_object(self, event):
         """ Handles the user changing the contents of the edit control.

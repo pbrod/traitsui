@@ -15,8 +15,6 @@
     an object trait in a Traits-based user interface.
 """
 
-
-
 from contextlib import contextmanager
 from functools import partial
 
@@ -49,8 +47,7 @@ from .undo import UndoItem
 
 from .item import Item
 
-
-
+UNITTESTING = False
 # Reference to an EditorFactory object
 factory_trait = Instance(EditorFactory)
 
@@ -159,7 +156,6 @@ class Editor(HasPrivateTraits):
 
         This should normally be overridden in a subclass.
         """
-        pass
 
     def error(self, excp):
         """ Handles an error that occurs while setting the object's trait value.
@@ -171,7 +167,8 @@ class Editor(HasPrivateTraits):
         excp : Exception
             The exception which occurred.
         """
-        pass
+        if UNITTESTING:
+            raise excp
 
     def set_focus(self):
         """ Assigns focus to the editor's underlying toolkit widget.

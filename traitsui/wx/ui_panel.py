@@ -23,7 +23,7 @@ import wx
 import wx.html as wh
 import re
 
-from cgi import escape
+from html import escape
 
 from traits.api import Instance, Undefined
 

@@ -18,7 +18,7 @@
 """
 
 
-
+import sys
 from types import CodeType
 
 
@@ -145,11 +145,12 @@ class ToolkitEditorFactory(EditorFactory):
                 else:
                     self.high = handler._high
         else:
+            # Default low and high is -max and max, respectively.
             if (self.low is None) and (self.low_name == ""):
-                self.low = 0.0
+                self.low = -sys.float_info.max
 
             if (self.high is None) and (self.high_name == ""):
-                self.high = 1.0
+                self.high = sys.float_info.max
 
     def _get_low(self):
         return self._low
@@ -157,7 +158,7 @@ class ToolkitEditorFactory(EditorFactory):
     def _set_low(self, low):
         old_low = self._low
         self._low = low = self._cast(low)
-        if self.is_float is Undefined:
+        if self.is_float is Undefined and low is not None:
             self.is_float = isinstance(low, float)
 
         if (self.low_label == "") or (
@@ -171,7 +172,7 @@ class ToolkitEditorFactory(EditorFactory):
     def _set_high(self, high):
         old_high = self._high
         self._high = high = self._cast(high)
-        if self.is_float is Undefined:
+        if self.is_float is Undefined and high is not None:
             self.is_float = isinstance(high, float)
 
         if (self.high_label == "") or (

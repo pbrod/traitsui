@@ -20,10 +20,7 @@
 """
 
 
-
 import logging
-
-
 
 from traits.api import (
     HasPrivateTraits,
@@ -88,6 +85,9 @@ class EditorFactory(HasPrivateTraits):
     #: The editor class to use for 'readonly' style views.
     readonly_editor_class = Property()
 
+    #: Show the error dialog when an error occur.
+    show_error_dialog = Bool(False)
+
     def __init__(self, *args, **traits):
         """ Initializes the factory object.
         """
@@ -98,7 +98,6 @@ class EditorFactory(HasPrivateTraits):
         """ Performs any initialization needed after all constructor traits
             have been set.
         """
-        pass
 
     def named_value(self, name, ui):
         """ Returns the value of a specified extended name of the form: name or
