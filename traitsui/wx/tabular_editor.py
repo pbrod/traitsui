@@ -233,7 +233,7 @@ class TabularEditor(Editor):
     row = Any()
 
     #: Should the selected item be edited after rebuilding the editor list:
-    edit = Bool(False)
+    edit = Bool(False)  # PAB
 
     #: The adapter from trait values to editor values:
     adapter = Instance(TabularAdapter)

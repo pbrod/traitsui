@@ -42,6 +42,7 @@ player_editor = TableEditor(
     configurable=False,
     auto_size=False,
     selected_indices='selected_player_indices',
+    orientation='horizontal',
     columns=[
         CheckboxColumn(name='in_lineup', label='In Lineup', width=0.12),
         PlayerColumn(

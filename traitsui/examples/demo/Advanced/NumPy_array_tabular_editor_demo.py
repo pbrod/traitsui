@@ -21,7 +21,8 @@ within 0.25 of the center of the cube.
 
 from numpy import sqrt
 from numpy.random import random
-
+from traits.etsconfig.api import ETSConfig
+ETSConfig.toolkit = 'wx'
 from traits.api import HasTraits, Property, Array
 from traitsui.api import View, Item, TabularAdapter, TabularEditor
 
@@ -33,7 +34,7 @@ class ArrayAdapter(TabularAdapter):
 
     font = 'Courier 10'
     alignment = 'right'
-    format = '%.4f'
+    #format = '%.4f'
 
     index_text = Property()
     index_image = Property()
@@ -64,12 +65,12 @@ class ShowArray(HasTraits):
                 adapter=ArrayAdapter(),
                 auto_resize=True,
                 # Do not allow any kind of editing of the array:
-                editable=False,
-                operations=[],
+                editable=True,
+                operations=['edit'],
                 drag_move=False,
             ),
         ),
-        title='Array Viewer',
+        title='Array Viewer {}'.format(ETSConfig.toolkit),
         width=0.3,
         height=0.8,
         resizable=True,
@@ -77,7 +78,7 @@ class ShowArray(HasTraits):
 
 
 # Create the demo:
-demo = ShowArray(data=random((100000, 3)))
+demo = ShowArray(data=random((10, 3)))
 
 # Run the demo (if invoked from the command line):
 if __name__ == '__main__':

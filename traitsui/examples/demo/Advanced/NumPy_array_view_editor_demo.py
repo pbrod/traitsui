@@ -50,8 +50,10 @@ Setting 'transpose' to True will logically transpose the input array (e.g. an
 """
 
 from numpy.random import random
-from traits.api import HasTraits, Array
-from traitsui.api import View, Item
+from traits.etsconfig.api import ETSConfig
+ETSConfig.toolkit = 'wx'
+from traits.api import HasTraits, Array, Button
+from traitsui.api import View, Item, VGroup
 from traitsui.ui_editors.array_view_editor import ArrayViewEditor
 
 # -- ShowArray demo class -------------------------------------------------
@@ -59,31 +61,39 @@ from traitsui.ui_editors.array_view_editor import ArrayViewEditor
 
 class ShowArray(HasTraits):
 
+    button = Button('Generate new array')
     data = Array
 
     view = View(
-        Item(
-            'data',
-            show_label=False,
-            editor=ArrayViewEditor(
-                titles=['x', 'y', 'z'],
-                format='%.4f',
-                # Font fails with wx in OSX;
-                #   see traitsui issue #13:
-                # font   = 'Arial 8'
-            ),
-        ),
+        VGroup(
+            Item('button'),
+            Item(
+                'data',
+                show_label=False,
+                editor=ArrayViewEditor(
+                    titles=['x'], #'y', 'z'],
+                    format='%.4f',
+
+                    # Font fails with wx in OSX;
+                    #   see traitsui issue #13:
+                    # font   = 'Arial 8'
+                ),
+            )),
         title='Array Viewer',
         width=0.3,
         height=0.8,
         resizable=True,
     )
 
+    def _button_fired(self):
+        n = len(self.data)
+        self.data=random((2*n+1))
+
 
 # -- Run the demo ---------------------------------------------------------
 
 # Create the demo:
-demo = ShowArray(data=random((100000, 3)))
+demo = ShowArray(data=random((10)))
 
 # Run the demo (if invoked from the command line):
 if __name__ == '__main__':

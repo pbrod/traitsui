@@ -1165,3 +1165,6 @@ def demo(
             css_filename=css_filename,
         ),
     ).configure_traits()
+
+if __name__ == '__main__':
+    demo()

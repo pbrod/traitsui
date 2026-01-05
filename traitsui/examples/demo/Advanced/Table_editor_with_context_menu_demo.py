@@ -66,6 +66,8 @@ player_editor = TableEditor(
     editable=True,
     sortable=False,
     auto_size=False,
+    orientation='horizontal',
+    edit_view = '',
     columns=[
         ObjectColumn(name='name', editable=False, width=0.28),
         AffectsAverageColumn(name='at_bats', label='AB'),

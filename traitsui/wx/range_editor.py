@@ -17,6 +17,7 @@ from decimal import Decimal
 from math import log10
 
 import wx
+from wx.lib.embeddedimage import PyEmbeddedImage
 
 from traits.api import TraitError, Str, Float, Any, Bool
 
@@ -32,6 +33,58 @@ if not hasattr(wx, "wx.wxEVT_SCROLL_ENDSCROLL"):
 else:
     wxEVT_SCROLL_ENDSCROLL = wx.wxEVT_SCROLL_ENDSCROLL  # @UndefinedVariable
 
+
+#----------------------------------------------------------------------
+SPIN_DOWN_PNG = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAA8AAAAJCAIAAABi7eEAAAAAAXNSR0IArs4c6QAAAARnQU1B"
+    "AACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABdSURBVChTlZDRCYAwDAWjG7hTx80I"
+    "majJBoL6rE+oUiTeR5sc91E6qaqkOetSCrdPzGzGtedA+a6XJ7QN1ltHRMBcYKZtwAxe4u6Q"
+    "OLnfjGtQa+XUwXrNgfLPf4scGOnWb5Qrs1cAAAAASUVORK5CYII=")
+SPIN_DOWN_BMP = SPIN_DOWN_PNG.GetBitmap()
+# SPIN_DOWN_BMP = wx.ArtProvider.GetBitmap(wx.ART_GO_DOWN, size=(15, 10))
+
+
+#----------------------------------------------------------------------
+SPIN_DOWN_CLICK_PNG = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAA8AAAAJCAIAAABi7eEAAAAAAXNSR0IArs4c6QAAAARnQU1B"
+    "AACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABhSURBVChTYwyb+5SBaABS3eInDuXh"
+    "BTWbXjIBqf/EISAAqf73H4HURVmQEbIUVPXffwh05cUfkDAYANnIUkCAbjYQXXoO0gAk0cSx"
+    "qwaiC8/QlQIRVPXX30QhICAlvBkYABZ4iQW9AE2IAAAAAElFTkSuQmCC")
+SPIN_DOWN_CLICK_BMP = SPIN_DOWN_CLICK_PNG.GetBitmap()
+
+#----------------------------------------------------------------------
+SPIN_DOWN_HOVER_PNG = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAA8AAAAJCAIAAABi7eEAAAAAAXNSR0IArs4c6QAAAARnQU1B"
+    "AACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABPSURBVChTY6jb8op4BFL9+ssfYhBZ"
+    "ql99/gNHDKgAWQqq+vmnP8gIqpCBAU0cqvrZxz9oCKgUTQSIoKqffPxDDIKqvvv2DzEIqppY"
+    "tOUVAEo9RMf3sYPlAAAAAElFTkSuQmCC")
+SPIN_DOWN_HOVER_BMP = SPIN_DOWN_HOVER_PNG.GetBitmap()
+
+#----------------------------------------------------------------------
+SPIN_UP_PNG = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAA8AAAAJCAIAAABi7eEAAAAAAXNSR0IArs4c6QAAAARnQU1B"
+    "AACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABESURBVChTlcrLDcAgEANR91/LtgWH"
+    "IKCFfBgkIi7mnXatUZx46+6hbh7qupHEtaAuf0868E/U14JwYv1QZw918lC7Im5Wyzom1M9u"
+    "GQAAAABJRU5ErkJggg==")
+SPIN_UP_BMP = SPIN_UP_PNG.GetBitmap()
+# SPIN_UP_BMP = wx.ArtProvider.GetBitmap(wx.ART_GO_UP, size=(15, 10))
+
+
+#----------------------------------------------------------------------
+SPIN_UP_CLICK_PNG = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAA8AAAAJCAIAAABi7eEAAAAAAXNSR0IArs4c6QAAAARnQU1B"
+    "AACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABlSURBVChTYwyb+5SBaABS3ewnDuXh"
+    "BbWbXjIBqX//iUJAAFL9/z860hRjQRMBIqjqP/9QkJY4C1AQSKKJQ1UjW6cnCVIKAUA2shQQ"
+    "gFR/+41Axx7+QUbIUlDVQG3EICAgJbwZGABuAIkSDr4NSAAAAABJRU5ErkJggg==")
+SPIN_UP_CLICK_BMP = SPIN_UP_CLICK_PNG.GetBitmap()
+
+#----------------------------------------------------------------------
+SPIN_UP_HOVER_PNG = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAA8AAAAJCAIAAABi7eEAAAAAAXNSR0IArs4c6QAAAARnQU1B"
+    "AACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABhSURBVChTY6zb8oqBaABSnesgBOXh"
+    "BZMPvGMCUv//E4WAAKT63390JMbLgiYCRNhVS/CxAAWBJJo4TDUSkuIHKYUAIBtZCghAqn/9"
+    "QaB7b/8gI2QpqGqgJcQgICAlvBkYAFDzglO6f/5gAAAAAElFTkSuQmCC")
+SPIN_UP_HOVER_BMP = SPIN_UP_HOVER_PNG.GetBitmap()
 
 # -------------------------------------------------------------------------
 #  'BaseRangeEditor' class:
@@ -604,29 +657,34 @@ class SimpleSpinEditor(BaseRangeEditor):
         control.SetSizerAndFit(sizer)
 
     def _make_button_low(self, parent, value):
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_DOWN, size=(15, 10))
         button_lo = wx.BitmapButton(parent,
                                     -1,
-                                    bitmap=bmp,
+                                    bitmap=SPIN_DOWN_BMP,
                                     size=(15, 12),
                                     style=wx.BU_EXACTFIT | wx.NO_BORDER,
                                     name="button_lo")
-        # button_lo.Bind(wx.EVT_BUTTON, self.spin_down)
+        button_lo.SetBitmapFocus(SPIN_DOWN_HOVER_BMP)
+        if hasattr(button_lo, "SetBitmapPressed"):
+            button_lo.SetBitmapPressed(SPIN_DOWN_CLICK_BMP)
+        else:
+            button_lo.SetBitmapSelected(SPIN_DOWN_CLICK_BMP)
         button_lo.Bind(wx.EVT_LEFT_DOWN, self.spin_down)
         button_lo.Bind(wx.EVT_MOUSEWHEEL, self.on_mouse_wheel)
         button_lo.Enable(self.low is None or self.low < value)
         return button_lo
 
     def _make_button_high(self, parent, value):
-
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_UP, size=(15, 10))
         button_hi = wx.BitmapButton(parent,
                                     -1,
-                                    bitmap=bmp,
+                                    bitmap=SPIN_UP_BMP,
                                     size=(15, 12),
                                     style=wx.BU_EXACTFIT | wx.NO_BORDER,
                                     name="button_hi")
-        # button_hi.Bind(wx.EVT_BUTTON, self.spin_up)
+        button_hi.SetBitmapFocus(SPIN_UP_HOVER_BMP)
+        if hasattr(button_hi, "SetBitmapPressed"):
+            button_hi.SetBitmapPressed(SPIN_UP_CLICK_BMP)
+        else:
+            button_hi.SetBitmapSelected(SPIN_UP_CLICK_BMP)
         button_hi.Bind(wx.EVT_LEFT_DOWN, self.spin_up)
         button_hi.Bind(wx.EVT_MOUSEWHEEL, self.on_mouse_wheel)
 

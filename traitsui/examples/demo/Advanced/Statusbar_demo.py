@@ -40,9 +40,11 @@ class TextEditor(HasPrivateTraits):
 
     # The text being edited:
     text = Str()
+    text2 = Str()
 
     # The current length of the text being edited:
     length = Property(observe='text')
+    length2 = Property(observe='text2')
 
     # The current time:
     time = Str()
@@ -58,6 +60,7 @@ class TextEditor(HasPrivateTraits):
         resizable=True,
         statusbar=[
             StatusItem(name='length', width=0.5),
+            StatusItem(name='length2', width=0.5),
             StatusItem(name='time', width=85),
         ],
     )
@@ -65,7 +68,12 @@ class TextEditor(HasPrivateTraits):
     # -- Property Implementations ---------------------------------------------
 
     def _get_length(self):
-        return 'Length: %d characters' % len(self.text)
+
+        self.text2 = 'Length: %d characters' % len(self.text)
+        return self.text
+
+    def _get_length2(self):
+        return 'Length2: %d characters' % len(self.text2)
 
     # -- Default Trait Values -------------------------------------------------
 
